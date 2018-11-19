@@ -494,4 +494,39 @@ if(nread) sdsIncrLen(s, read);
 
 可变长度参数版本的sdscatprintf()
 
+思路
 
+* 最初缓存的大小为fmt的长度 * 2
+
+* 用栈上分配的**静态**缓存比用堆上分配的缓存快（没有syscall）
+
+* 如果缓存长度大于静态缓存长度，就只能用堆上分配的缓存
+
+* vsnprintf的返回值不能告诉你缓存是否够用
+
+* buf[-2] = NULL， 如果写后buf[-2] != NULL，就表示缓存不够，将缓存长度翻倍，再写一遍
+
+* 循环后buf指向完整的字符串了，调用sdscat即可
+
+注意
+
+1. 静态缓存指的是char[1024]这种使用编译时就能确定的值初始化数组
+
+2. char[x]会在栈上分配，但是可能因为x过大导致栈溢出
+
+3. 上面的方法是(VLA)[https://en.wikipedia.org/wiki/Variable-length_array#C99]
+，并不推荐使用
+
+4. 因为va_list只能用一次，所以在循环中要用va_copy复制va_list
+
+#### sds sdscatprintf(sds s, const char *fmt, ...)
+
+调用后所有对*s*的引用都不再合法，需要修改为返回值
+
+注意
+
+* 使用va_list前后必须有va_start和va_end
+
+* 调用va_arg会修改va_list，而va_copy不会
+
+#### sds sdscatfmt(sds s, char const *fmt, ...)
