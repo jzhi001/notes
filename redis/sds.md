@@ -4,10 +4,14 @@ sds.h
 
 #define SDS_MAX_PREALLOC (1024*1024)
 
-const char *SDS_NOINIT 
-表示不初始化buf，定义在sds.c中
+sdshdr5 的操作
+
+long 和 long long 的区别
 
 -----------------------------------------------------------------------------------------------------------------------------------------
+
+sds -> simple dynamic string
+sdshdr -> sds header
 
 T: sdshdr type，也就是sdshdr中len的长度
 
@@ -26,6 +30,9 @@ struct sdshdr5 {
     char buf[];
 };
 ```
+
+const char *SDS_NOINIT 
+表示不初始化buf，定义在sds.c中
 
 ``` c
 typedef char *sds;
@@ -274,70 +281,217 @@ static inline char sdsReqType(size_t string_size) {
 }
 ```
 
+Req应该是require
 根据字符串长度返回对应的sdshdr type
 LONG_MAX VS LLONG_MAX ??
 
-```C
-sds sdsnewlen(const void *init, size_t initlen) {
-    void *sh;
-    sds s;
-    char type = sdsReqType(initlen);
-    /* Empty strings are usually created in order to append. Use type 8
-     * since type 5 is not good at this. */
-    if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
-    int hdrlen = sdsHdrSize(type);
-    unsigned char *fp; /* flags pointer. */
+#### sds sdsnewlen(const void *init, size_t initlen) 
 
-    sh = s_malloc(hdrlen+initlen+1);
-    if (init==SDS_NOINIT)
-        init = NULL;
-    else if (!init)
-        memset(sh, 0, hdrlen+initlen+1);
-    if (sh == NULL) return NULL;
-    s = (char*)sh+hdrlen;
-    fp = ((unsigned char*)s)-1;
-    switch(type) {
-        case SDS_TYPE_5: {
-            *fp = type | (initlen << SDS_TYPE_BITS);
-            break;
-        }
-        case SDS_TYPE_8: {
-            SDS_HDR_VAR(8,s);
-            sh->len = initlen;
-            sh->alloc = initlen;
-            *fp = type;
-            break;
-        }
-        case SDS_TYPE_16: {
-            SDS_HDR_VAR(16,s);
-            sh->len = initlen;
-            sh->alloc = initlen;
-            *fp = type;
-            break;
-        }
-        case SDS_TYPE_32: {
-            SDS_HDR_VAR(32,s);
-            sh->len = initlen;
-            sh->alloc = initlen;
-            *fp = type;
-            break;
-        }
-        case SDS_TYPE_64: {
-            SDS_HDR_VAR(64,s);
-            sh->len = initlen;
-            sh->alloc = initlen;
-            *fp = type;
-            break;
-        }
-    }
-    if (initlen && init)
-        memcpy(s, init, initlen);
-    s[initlen] = '\0';
-    return s;
-}
-```
+sds的构造函数
 
-init = NULL，buf会被初始化，0字节
-SDS_NOINIT，buf不会初始化
+参数
+
+init: 字符串
+initlen: 字符串长度
+
+要求
+
+init = NULL，buf会被初始化为全0
+init = SDS_NOINIT，buf不会初始化
+len = 0（空字符串） 用sdshdr8，Redis中的空字符串总是用来扩展的
 字符串后面自动加NULL，为了利用printf等库函数
 字符串中含有NULL也没问题（兼容二进制数组），因为sdshdr中包含长度
+
+思路
+
+根据字符串长度获取对应的容器类型type
+根据type分配内存（sdshdr的长度 + initlen + 1（NULL terminator））
+根据type初始化字段 len = alloc = initlen, flag
+复制字符串到buf字段
+buf结尾加上'\0'
+返回sds(sh->buf)
+
+#### sds sdsempty(void)
+
+sds可选构造参数，构造长度为0的空字符串sds
+
+#### sds sdsnew(const char *init)
+
+sds可选构造参数，使用C-string(以NULL结尾的字符串)进行构造
+
+参数
+
+init: C-string
+
+#### sds sdsdup(const sds s)
+
+深拷贝sds
+
+#### void sdsfree(sds s)
+
+sds的析构函数
+
+参数
+
+s: 被析构的sds，可能是NULL
+
+要求
+
+如果s = NULL，直接返回
+
+#### void sdsupdatelen(sds s)
+
+将sds的长度更新为strlen(s)，也就是从头到第一个NULL的长度
+这个函数用于手动操作sds，如：
+
+```C
+sds s = sdsnew("foobar");
+s[2] = '\0';
+sdsupdatelen(s);
+printf("%d\n", sdslen(s));
+```
+
+会输出 "2"
+如果不调用sdsupdatelen(),会输出 "6"
+
+#### void sdsclear(sds s)
+
+将sds长度设为0，以清空字符串
+不用释放旧字符串占用的内存，它们将用于以后的扩展操作
+
+#### sds sdsMakeRoomFor(sds s, size_t addlen)
+
+确保sds有至少*addlen*字节的可用空间，和一个额外的字节给NULL
+在进行扩展操作时应该先调用该函数
+
+扩展要求
+
+* 如果新长度 < SDS_MAX_PREALLOC，最终长度为新长度 * 2
+* 否则最终长度为新长度 + SDS_MAX_PREALLOC 
+
+注意
+
+* 该函数并不修改sds的**长度**，也就是sdslen()的返回值
+* 不要用sdshdr5作为新类型，因为sdshdr5没有记录可用空间的字段
+
+思路
+
+先拿到sds的可用空间avail  
+如果avail >= addlen，就直接返回  
+否则根据扩展要求算出新的长度和对应的sdshdr类型 type  
+根据type扩展sdshdr的内存  
+如果扩展前后type一样可以用realloc  
+否则只能用malloc（header中字段的长度有变化）重新分配内存  
+修改header字段  
+
+#### sdsRemoveFreeSpace(sds s)
+
+通过重新分配sds的内存消除sds后面的可用空间  
+sds保持不变，但是下一次扩展操作会重新分配内存  
+调用该函数后，参数中的sds及所有指向该sds的引用不再合法，需要指向该函数的返回值
+
+思路
+
+根据sds长度得到新的sdshdr类型type  
+如果old type = type || type > SDS_TYPE_8 就保留old type  
+否则就重新分配内存  
+修改字段  
+
+#### size_t sdsAllocSize(sds s)
+
+返回sdshdr占用的内存大小，包括：
+
+1. sds header
+
+2. string
+
+3. free buffer
+
+4. NULL
+
+#### void *sdsAllocPtr(sds s)
+
+返回sds所在的sdshdr指针
+
+#### void sdsIncrLen(sds s, ssize_t incr)
+
+根据*incr*改变sds的长度和剩余空间，在末尾加上NULL  
+
+注意： *incr*可能是负数
+
+用例： 将sds当做buffer用，从kernel中读取字节到sds末尾  
+如果是一般的字符串(char*)，则要单独声明缓存，读取完成后再strcat()
+
+```C
+size_t oldlen = sdslen(s);
+sds s = sdsMakeRoomFor(s, BUFFER_SIZE);
+size_t nread = read(fd, s+oldlen, BUFFER_SIZE);
+if(nread) sdsIncrLen(s, read);
+```
+
+思路
+
+在修改长度前要验证*incr*是否合法  
+如果*incr* > 0，新长度是否不超过sdshdr的最大长度  
+如果小于0，当前长度是否大于-*incr*
+
+#### sds sdsgrouzero(sds s, size_t len)
+
+扩展字符串，扩展的部分全部置0  
+如果*len* < 当前长度，直接返回  
+
+#### sds sdscatlen(sds s, const void *t, size_t len)
+
+在*s*后面添加*t*指向的*len*长度内容  
+函数调用后，参数中的sds不再合法，所有指向它的引用要指向该函数的返回值
+
+#### sds sdscat(sds s, const char *t)
+
+在sds后面添加C-string
+
+#### sdscatsds(sds s, const sds t)
+
+在*s*后面添加*t*
+函数调用后，参数中的sds不再合法，所有指向它的引用要指向该函数的返回值
+
+#### sds sdscpylen(sds s, const char *t, size_t len)
+
+将*s*修改为*t*指向的*len*长度内容（可能为二字节流）
+
+#### sds sdscpy(sds s, const char *t)
+
+同sdscpylen()，但是t必须指向C-string
+
+#### int sdsll2str(char *s, long long value)
+
+将数字转换为字符串存在*s*中，返回*s*的长度
+*s*必须指向一个至少长为SDS_LLSTR_SIZE的字符串  
+该函数是sdscatlonglong()的helper function
+
+```c
+#define SDS_LLSTR_SIZE 21 /*在我的机器上long long最多占20个字符（包括负号）*/
+```
+
+思路:
+
+* 将abs(value)从低位到高位存在s中
+
+* 如果value是负数就加上'-'，然后加上'\0'(此时数字是倒序的)
+
+* 计算出长度
+
+* 翻转s，得到正序
+
+#### int sdsull2str(char *s, unsigned long long v)
+
+同sdsll2str
+
+#### sds sdsfromlonglong(long long value)
+
+返回值为*value*的sds
+
+#### sds sdscatvprintf(sds s, const char *fmt, va_list ap)
+
+可变长度参数版本的sdscatprintf()
+
+
