@@ -66,11 +66,18 @@ struct sdshdr64 *sh = (void*)(s - sizeof(struct sdshdr64))
 
 指针运算，通过sds找到sdshdr
 
+```c
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+```
+
 使用sdshdr type和sds将sds转换为shshdr指针
 
+```c
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
-不知道
+```
+
+type 5 的长度和类型存放在一个字节(flags)中，最低三位是类型，其余五位是长度  
+所以 flags >> 3 可以获得长度
 
 ``` c
 static inline size_t sdslen(const sds s) {
@@ -123,8 +130,8 @@ static inline size_t sdsavail(const sds s) {
 }
 ```
 
-获得sds的空闲长度。思路是获得sds所在的sdshdr指针，然后返回sh->alloc - sh->len
-sdshdr5为什么返回0？？
+获得sds的空闲长度。思路是获得sds所在的sdshdr指针，然后返回sh->alloc - sh->len  
+sdshdr5为什么返回0？ 因为type 5只保存了总长度而没有当前长度，所以没法算出空闲长度
 
 ```c
 static inline void sdssetlen(sds s, size_t newlen) {
@@ -554,3 +561,112 @@ printf("%s\n", s);
 会输出 "Hello World"
 
 思路： 使用双指针，判断cset中是否含有字符
+
+#### sds sdsrange(sds s, ssize_t start, ssize_t end)
+
+返回s[start, end]，*start*和*end*可能为负数
+
+注意：start和end可能会越界，如果越界应该调整至左右边界
+
+#### void sdstolower(sds s)
+
+#### void sdstoupper(sds s)
+
+#### int sdscmp(const sds s1, const sds s2)
+
+先按照较短sds的长度使用memcmp()比较两个sds  
+如果相同，再比较长度
+
+#### sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count)
+
+使用*sep*分割*s*并返回sds数组头，返回的数组长度放在*count*中  
+sep可能是字符串
+
+以下情况返回NULL
+
+* 内存不足
+
+* *s*或*sep*长度为0
+
+思路
+
+* 使用偏移量start表示子字符串开头，偏移量p表示当前位置  
+* 遍历p，如果p处匹配sep，就把s[start:p-1]加入结果  
+* 遍历结束后单独加上最后一个sep后面的子字符串  
+* 因为不知道结果数量，所以需要动态调整堆上分配的内存
+* 源码中使用了goto，用于错误后的处理（相当于finally）
+
+#### void sdsfreesplitres(sds *tokens, int count)
+
+释放sdssplitlen返回的数组内存  
+注意：要先释放所有sds，再释放数组
+
+#### sds sdscatrepr(sds s, const char *p, size_t len)
+
+在s后面添加字符串p，并将p中所有不可打印字符(用isprint检测)变成字符串形式('\n' -> "\\n")  
+被添加的字符串需用""包裹
+该函数用于模拟用户输入    
+函数返回后所有对s的引用不再合法，应该修改为函数的返回值
+
+需要转化的字符有:
+
+* '\\'
+
+* '"'
+
+* '\t'
+
+* '\n'
+
+* '\r'
+
+* 'a'
+
+* 'b'
+
+* 其它不可打印的十六进制数 -> "\\xAB"
+
+例子：
+
+```c
+sds s = sdsnew("line: ");
+char *p = {'a', '\n', 'b', '\t', '\xFF'};
+s = sdscatrepr(s, p, 5);
+printf("%s\n", s);
+```
+
+会输出 "a\nb\t\xFF"
+
+#### sds *sdssplitargs(const char *line, int *argc)
+
+按空格分割*line*中的参数并返回结果数组，数组长度存在*argc*中  
+参数中的空格会被忽略  
+该函数用于处理用户输入  
+调用者要手动调用sdsfreespliters()释放返回数组的内存
+
+以下情况返回NULL
+
+* 引号不匹配，如: 'ab"
+
+* 右引号后不是空格，如： 'foo'bar
+
+注意去掉最外层的引号并处理转义字符
+
+注：非常适合当做算法题
+
+#### sdsmapchars(sds s, const char *from, const char *to, size_t setlen)
+
+将from中的字符替换成to，调用后原来的引用不再合法
+
+如：
+
+s = "hello", from = "ho", to = "01"  
+则返回结果为 "0ell1"
+
+#### sds sdsjoin(char **argv, int argc, char *sep)
+
+C-string版本的join，返回使用*sep*将argv连接的sds
+
+#### sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen)
+
+sds版本的join
