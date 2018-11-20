@@ -31,8 +31,7 @@ struct sdshdr5 {
 };
 ```
 
-const char *SDS_NOINIT 
-表示不初始化buf，定义在sds.c中
+const char *SDS_NOINIT 表示不初始化buf，定义在sds.c中
 
 ``` c
 typedef char *sds;
@@ -41,22 +40,14 @@ typedef char *sds;
 ### sds mask
 
 ``` c
-#define SDS_TYPE_5  0
-#define SDS_TYPE_8  1
-#define SDS_TYPE_16 2
-#define SDS_TYPE_32 3
-#define SDS_TYPE_64 4
-#define SDS_TYPE_MASK 7
+#define SDS_TYPE_5  0     /* 000 */
+#define SDS_TYPE_8  1     /* 001 */
+#define SDS_TYPE_16 2     /* 010 */
+#define SDS_TYPE_32 3     /* 011 */
+#define SDS_TYPE_64 4     /* 100 */
+#define SDS_TYPE_MASK 7   /* 111 */
 #define SDS_TYPE_BITS 3
 ```
-
-sds5   000  
-sds8   001  
-sds16  010  
-sds32  011  
-sds64  100  
-sds  mask  111  
-
 
 [Swallowing the Semicolon in C macros](https://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon)
 
@@ -514,8 +505,7 @@ if(nread) sdsIncrLen(s, read);
 
 2. char[x]会在栈上分配，但是可能因为x过大导致栈溢出
 
-3. 上面的方法是(VLA)[https://en.wikipedia.org/wiki/Variable-length_array#C99]
-，并不推荐使用
+3. 上面的方法是[VLA](https://en.wikipedia.org/wiki/Variable-length_array#C99)，并不推荐使用
 
 4. 因为va_list只能用一次，所以在循环中要用va_copy复制va_list
 
@@ -530,3 +520,37 @@ if(nread) sdsIncrLen(s, read);
 * 调用va_arg会修改va_list，而va_copy不会
 
 #### sds sdscatfmt(sds s, char const *fmt, ...)
+
+和sdscatprintf相似，但是比它快，因为该函数没有调用libc中的printf  
+该函数只实现了几个format：
+
+* %s - C string
+
+* %S - sds string
+
+* %i - signed int
+
+* %I - 64 bit signed integer
+
+* %u - unsigned int
+
+* %U - 64 bit unsigned integer
+
+* %% - verbatim '%'
+
+#### sds sdstrim(sds s, const char *cset)
+
+删除*s*中所有包含在C-string *cset*中的字符  
+调用该函数后，所有对*s*的引用不再合法，应修改为该函数的返回值
+
+例子：
+
+```c
+sds s = sdsnew("AA...AA.a.aa.aHelloWorld     :::");
+sds s = sdstrim(s,"Aa. :");
+printf("%s\n", s);
+```
+
+会输出 "Hello World"
+
+思路： 使用双指针，判断cset中是否含有字符
