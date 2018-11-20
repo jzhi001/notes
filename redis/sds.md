@@ -1,85 +1,144 @@
-sds.h
+# SDS
 
-### 未解决
-
-#define SDS_MAX_PREALLOC (1024*1024)
-
-sdshdr5 的操作
+## unsolved
 
 long 和 long long 的区别
 
------------------------------------------------------------------------------------------------------------------------------------------
+### kept for future
 
-sds -> simple dynamic string
-sdshdr -> sds header
+[Swallowing the Semicolon in C macros](https://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon)
 
-T: sdshdr type，也就是sdshdr中len的长度
+[Stringizing in C marcos](https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing)
 
-sds是主角，sds所在的sdshdr中其他的字段是sds的header
+---
 
-```c
-struct sdshdrT{
-    uintT_t len;  /* 已使用长度 */
-    uintT_t alloc; /* sds总长（不算header和字符串结尾的NULL） */
-    unsigned char flags; /* 最低三位表示T，其余五位没有用 */
-    char buf[]; /* sds */
-};
+## sds.h
 
-struct sdshdr5 {
-    unsigned char flags; /* 最低三位表示flag，其余五位表示长度 */
-    char buf[];
-};
-```
+### sds -> simple dynamic string
 
-const char *SDS_NOINIT 表示不初始化buf，定义在sds.c中
+#### 为什么要用sds？
+
+* 一般计算字符串长度，也就是调用strlen，需要O(n)时间。而Redis需要O(1)
+
+* Redis希望减少分配/释放内存的次数，一般cat/trim操作一定会进行内存操作
+
+* Redis希望sds可以复用库函数，如printf
+
+#### sds是什么？
 
 ``` c
 typedef char *sds;
 ```
 
-### sds mask
+sds就是char*的别名，也就是说所有对sds的操作就是对普通字符串的操作。虽然复用库函数这个需求解决了，但是说好的数据结构呢？
 
-``` c
-#define SDS_TYPE_5  0     /* 000 */
-#define SDS_TYPE_8  1     /* 001 */
-#define SDS_TYPE_16 2     /* 010 */
-#define SDS_TYPE_32 3     /* 011 */
-#define SDS_TYPE_64 4     /* 100 */
-#define SDS_TYPE_MASK 7   /* 111 */
-#define SDS_TYPE_BITS 3
-```
+#### 简单版的sds
 
-[Swallowing the Semicolon in C macros](https://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon)
-
-[Concatenation in C marcos](https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html)
-
-[Stringizing in C marcos](https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing)
-
-#define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)))
-使用sdshdr type和sds声明sdshdr指针变量sh
-
-T: sds type, s: sds
-
-sds s;
-SDS_HDR_VAR(64, s)
-struct sdshdr64 *sh = (void*)(s - sizeof(struct sdshdr64))
-
-指针运算，通过sds找到sdshdr
+要实现上面的需求，sds只需要额外的两个字段：当前字符串长度和给字符串分配的内存长度。
+有了字符串长度字段计算长度就变成了O(1)时间；记录了内存长度后字符串就可以多留一些内存用于以后的操作，而不是每次变更字符串长度时都要按新长度分配内存。
 
 ```c
-#define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+struct sdshdr{ /* sds header */
+    unsigned int len; /* 目前字符串的长度 */
+    unsigned int alloc; /* 给字符串分配的内存长度，不包括最后的NULL */
+    char[] buf; /* 字符串 */
+};
 ```
 
-使用sdshdr type和sds将sds转换为shshdr指针
+数据结构告诉我们sds其实是被包含在sdshdr中的。但是前面说过sds才是这个库的主角，我们如何通过sds找到它所在的数据结构呢？  
+
+答案就是C语言中的指针运算了：
 
 ```c
-#define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
+sds getHeader(sds *s){
+    return (void*)(s - sizeof(struct sdshdr));
+}
 ```
 
-type 5 的长度和类型存放在一个字节(flags)中，最低三位是类型，其余五位是长度  
-所以 flags >> 3 可以获得长度
+多说一句，sdshdr的定义方式用了[动态数组](https://stackoverflow.com/questions/2060974/how-to-include-a-dynamic-array-inside-a-struct-in-c)，也就是把空数组变量放在结构体字段的最后一位。这样这个数组占用的内存是算在结构体中，而且它没有固定长度限制。  
 
-``` c
+在sdshdr中**必须**使用动态数组而不是指针。如果使用指针：
+
+```c
+struct sdshdr{
+    unsigned int len;
+    unsigned int alloc;
+    char *buf;
+};
+```
+
+buf指向堆中的字符串地址，我们就无法通过sds找到sdshdr了。
+
+#### 现实中的sds
+
+简单的sds已经满足所有需求了，但是它还**不够效率**。看下面的sds header：
+
+```c
+struct sdshdr s = {
+    3,
+    3,
+    "foo\x00"
+};
+
+assert(sizeof(s) == 12);
+```
+
+s是一个非常段的字符串(长度4字节)，但是它却需要额外2个uint记录长度！作为较底层的C程序，Redis希望len和alloc字段类型尽可能的小，也就是说s用两个char就可以了！  
+
+Redis按照C语言的整数类型定义了不同的sdshdr类型，并增加了type字段保存类型,type的最低三位为不同类型的[mask](https://en.wikipedia.org/wiki/Mask_(computing))：
+
+* uint8_t   ->  sdshdr8  (0x001)
+
+* uint16_t  ->  sdshdr16 (0x010)
+
+* uint32_t  ->  sdshdr32 (0x011)
+
+* uint64_t  ->  sdshdr64 (0x100)
+
+* SDS_TYPE_MASK (0x111)
+
+* SDS_TYPE_BITS (3)
+
+```c
+struct sdshdr8{
+    uint8_t len;
+    uint8_t alloc;
+    unsigned char flags;
+    char[] buf;
+};
+```
+
+所以我们应该用sdshdr8来保存"foo"，它比上面的节省了6个字节，并且在"foo"扩展到256字节之前都OK。  
+
+可是如果我们从不扩展"foo"呢？如果我们确定不对字符串进行操作，那么我们就不需要alloc字段了。Redis为这种长度短、几乎不变的字符串定义了更紧凑的类型：
+
+```c
+struct sdshdr5{
+    unsigned char flags; /* 最低三位表示type，其余五位表示长度 */
+    char buf[];
+}
+```
+
+这种类型可以存最长为32的字符串。但是由于节省了两个变量，获取长度就稍微麻烦一点：
+
+```c
+#define SDS_TYPE_5_LEN(f) ((f) >> SDS_TYPE_BITS)
+```
+
+源码中使用flags作为宏参数，那么怎么通过sds获取flags呢？ 答案是s[-1]。
+
+#### sds中的"多态"
+
+使用sds获取flags是简单的，因为在所有类型的sds header中flags字段都紧挨着字符串。我们利用这个相对距离进行指针运算获取了flags，那么其他的字段呢？比如sdshdr？是不是没那么简单了，因为不同header类型有不同长度的字段，所以我们要根据类型减去对应的header长度。Redis作者利用[宏的拼接](https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html)避免了大量重复:
+
+```c
+#define SDS_HDR(T, s) (struct sdshdr##T*)((s)-sizeof(struct sdshdr##T))
+#define SDS_HDR_VAR(T, s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
+```
+
+但是其他操作就不能这样写了，比如获取len字段的sdslen：
+
+```c
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -98,148 +157,43 @@ static inline size_t sdslen(const sds s) {
 }
 ```
 
-计算sds的长度。思路是通过sds拿到sdshdr指针，然后返回其中的len字段  
-sds[-1]是指针运算，可以得到sdshdr中sds前面是char flags，然后通过flags & SDS_TYPE_MASK获得sdshdr type，最后调用SDS_HDR(T,s)拿到sdshdr指针就能获取成员变量len
-如果是sdshdr5，flags的最低三位表示type，其余五位表示长度。所以flags>>3可以得到长度
+因为sds的库函数使用sds作为参数，所以我们要先获得sds的header类型，根据类型做处理。sds.h中大量的switch-case就是在写sds的"多态"  
+
+#### sds.h 漏网之鱼
+
+到这里sds.h中的内容就基本上看完了，我们还落下了一点东西  
 
 ```c
-static inline size_t sdsavail(const sds s) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5: {
-            return 0;
-        }
-        case SDS_TYPE_8: {
-            SDS_HDR_VAR(8,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_16: {
-            SDS_HDR_VAR(16,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_32: {
-            SDS_HDR_VAR(32,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_64: {
-            SDS_HDR_VAR(64,s);
-            return sh->alloc - sh->len;
-        }
-    }
-    return 0;
-}
+const char *SDS_NOINIT 
 ```
 
-获得sds的空闲长度。思路是获得sds所在的sdshdr指针，然后返回sh->alloc - sh->len  
-sdshdr5为什么返回0？ 因为type 5只保存了总长度而没有当前长度，所以没法算出空闲长度
+用于sds的构造函数[sdsnewlen](#sds-sdsnewlen(const-void-*init,-size_t-initlen))，将SDS_NOINIT作为参数表示不给字符串分配内存
 
 ```c
-static inline void sdssetlen(sds s, size_t newlen) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            {
-                unsigned char *fp = ((unsigned char*)s)-1;
-                *fp = SDS_TYPE_5 | (newlen << SDS_TYPE_BITS);
-            }
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->len = newlen;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->len = newlen;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->len = newlen;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->len = newlen;
-            break;
-    }
-}
+#define SDS_MAX_PREALLOC (1024*1024)
 ```
 
-设置sds的长度。思路是通过sds拿到它所在的sdshdr *sh，然后修改sh->len。
-如果是sdshdr5，则修改flags的前五位
+用于调整sds内存的函数[sdsMakeRoomFor](#sds-sdsMakeRoomFor(sds-s,-size_t-addlen))，表示可分配给sds的内存最大值
 
 ```c
-static inline void sdsinclen(sds s, size_t inc) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            {
-                unsigned char *fp = ((unsigned char*)s)-1;
-                unsigned char newlen = SDS_TYPE_5_LEN(flags)+inc;
-                *fp = SDS_TYPE_5 | (newlen << SDS_TYPE_BITS);
-            }
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->len += inc;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->len += inc;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->len += inc;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->len += inc;
-            break;
-    }
-}
+struct __attribute__ ((__packed__)) sdshdr5 {
+    unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
+    char buf[];
+};
 ```
 
-增加sds的长度，思路和sdssetlen相同
+sdshdr定义中用到了[C的类型参数](https://gcc.gnu.org/onlinedocs/gcc/Common-Type-Attributes.html#Common-Type-Attributes)
 
-```c
-static inline size_t sdsalloc(const sds s) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            return SDS_TYPE_5_LEN(flags);
-        case SDS_TYPE_8:
-            return SDS_HDR(8,s)->alloc;
-        case SDS_TYPE_16:
-            return SDS_HDR(16,s)->alloc;
-        case SDS_TYPE_32:
-            return SDS_HDR(32,s)->alloc;
-        case SDS_TYPE_64:
-            return SDS_HDR(64,s)->alloc;
-    }
-    return 0;
-}
-```
+---
 
-获取sds的总长度
+## sds.c
 
-```c
-static inline void sdssetalloc(sds s, size_t newlen) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            /* Nothing to do, this type has no total allocation info. */
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->alloc = newlen;
-            break;
-    }
-}
-```
-
-设置sds的总长度
-
-------------------------------------------------------------
-
-sds.c
+这里的代码都**不是源码**，而是我读过源码一段时间后自己实现的(防止默写代码)  
+该模块中有现成的测试用例  
+动手写一遍可以加深对模块抽象层面和底层细节(有时还有linux)的理解，也能提高C语言的熟练度  
+并且很多函数都是算法题/笔试题的变种，非常值得实现  
+相比源码，我自己的实现有更高的可读性(自认为)，但是效率更低(因为使用子函数重构)  
+如果你看不懂源码，可以先参考我的代码
 
 ```c
 static inline int sdsHdrSize(char type) {
@@ -283,7 +237,7 @@ Req应该是require
 根据字符串长度返回对应的sdshdr type
 LONG_MAX VS LLONG_MAX ??
 
-#### sds sdsnewlen(const void *init, size_t initlen) 
+#### sds sdsnewlen(const void *init, size_t initlen)
 
 sds的构造函数
 
@@ -364,6 +318,7 @@ printf("%d\n", sdslen(s));
 
 扩展要求
 
+* SDS_MAX_PREALLOC表示可分配的内存的最大值
 * 如果新长度 < SDS_MAX_PREALLOC，最终长度为新长度 * 2
 * 否则最终长度为新长度 + SDS_MAX_PREALLOC 
 
