@@ -2,19 +2,21 @@
 
 ## unsolved
 
-为什么fd不能大于setsize  
+* ae_epoll 还没看
 
-AE_DONT_WAIT 是处理时间事件的方式，指不等到指定时间直接处理
+* 为什么fd不能大于setsize  
 
-AE_NONE表示fileEvent的null  
+* AE_DONT_WAIT 是处理时间事件的方式，指不等到指定时间直接处理，为什么要这样？ (ae.c 400行)
 
-beforeSleep？？ afterSleep？？
+* AE_NONE表示fileEvent的null  
 
-void aeEventFinalizerProc(strcut aeEventLoop *eventLoop, void *clientData) 干嘛用的？？ clientData的后处理？
+* beforeSleep？？ afterSleep？？
+
+* void aeEventFinalizerProc(strcut aeEventLoop *eventLoop, void *clientData) 干嘛用的？？ clientData的后处理？
 
 它用在哪？？
 
-timeProc例子：
+* timeProc在哪里用到：
 
 ```c
 //in module.c
@@ -39,9 +41,21 @@ int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData
 
 如：
 
+* afterSleep调用时机：seApiPoll返回后
+
+afterSleep回调在哪里用到：
+
+```c
+//server.c
+void afterSleep(struct aeEventLoop *eventLoop);
+aeSetAfterSleepProc(server.el,afterSleep);
+```
+
 注册时间事件a，它会在10分钟后被处理。如果此时使用AE_DONT_WAIT的flag调用aeEventProcess，事件a会被立刻处理
 
-eventLoop中每一个文件对应一个fileEvent，一个fired，一个epoll_event
+* eventLoop中每一个文件对应一个fileEvent，一个fired，一个epoll_event
+
+* processTimeEvents() 中的 clock skew
 
 ## Event Loop
 
@@ -68,10 +82,10 @@ OS通过分配时间片的方式在两个线程间来回切换，并执行一小
 因为线程切换，一个线程的阻塞不会影响另一个线程的运行
 
 ### 事件循环
-
-事件循环使用一个数据结构保存用户注册的事件  
-
-它的运行方式是死循环(除非有停止命令)，每次循环做两个操作
+fanhuihou
+fanhuihou
+fanhuihou
+fanhuihou操作
 
 1. 查找并处理到时间的time event
 
@@ -91,7 +105,7 @@ struct eventLoop;
 
 ### time event 类型
 
-要定义timeEvent，我们先想想它需要那些字段：
+要定义timeEvent，我们先想想它需要那些字段：fanhuihou
 
 * 什么时候处理该事件 -> 时间戳
 
@@ -235,8 +249,30 @@ void timeEventProc(eventLoop *el){
 }
 ```
 
-为什么不处理time event中注册的time event??
+### 为什么不处理time event中注册的time event??
 
-clock skew??
+[clock skew](https://en.wikipedia.org/wiki/Clock_skew)??
 
 ### file event
+
+### process event
+
+简单思路：在处理下一个时间事件前处理文件事件
+
+先找到最近要处理的时间事件te，算出现在到处理te还有多少时间t
+
+在t时间内处理文件事件(条件是有文件事件或者 处理时间事件并且不是AE_DONT_WAIT) (如果AE_DONT_WAIT 就把t改成0， 这样下次循环会直接处理该时间事件)：
+
+调用aeApiPoll(eventLoop, t)，该函数会找到所有可以操作的fd并放进eventLoop->fired(从0开始)，该函数最多等待t时间
+
+如果有afterSleep就调用
+
+处理所有可操作的文件事件：
+
+事件本体fe在eventLoop->events中，可进行的操作mask在eventLoop->fired中
+
+先处理读操作，后处理写操作。如果设置了AE_BARRIER就反过来
+
+用fe->mask & mask & AE_XXABLE防止mask中设置了fe未设置的操作(注释没看懂)
+
+为什么要判断 !fired || fe->wfileProc != fe->rfileProc
