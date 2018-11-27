@@ -127,7 +127,8 @@ Redis中新的time event被加在链表的头部
 目前为止我们的设计：
 
 ```c
-typedef void timeProc(void);
+//privData: 事件处理可能需要的参数
+typedef void timeProc(void* privData);
 
 struct timeEvent{
     long id;
