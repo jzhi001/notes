@@ -20,8 +20,6 @@
 
 * [databases](./redis-conf.md#databases-num)
 
-TODO
-
 ## Redis数据类型(Redis Object)
 
 * String
@@ -36,17 +34,21 @@ TODO
 
 * server
 
-* Redis Object Implements
+* Redis Object 实现
 
-  * robj
+  * [robj](./robj.md)
 
-  * String type robj
+  * [String type robj](./robj.md#String-type-robj)
 
-  * List type robj
+  * [List type robj](./robj.md#List-type-robj)
 
 * Redis command
 
 ## Redis运行流程
+
+TODO
+
+## save & bgsave
 
 TODO
 
@@ -60,12 +62,12 @@ TODO
 
 ## Redis modules
 
-* sds
+* [sds](../sds.md)
 
 * adlist
 
 * dict
 
-* eventLoop
+* [ae(eventLoop)](../ae.md)
 
 * anet
