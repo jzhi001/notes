@@ -34,27 +34,11 @@
 #define REDIS_CMD_INLINE        0
 ```
 
-### Redis对象类型
-
-```c
-#define REDIS_STRING 0
-#define REDIS_LIST 1
-#define REDIS_SET 2
-#define REDIS_SELECTDB 254
-#define REDIS_EOF 255
-```
-
 ### List相关参数
 
 ```c
 #define REDIS_HEAD 0
 #define REDIS_TAIL 1
-```
-
-### 防止编译器的多余参数警告
-
-```c
-#define REDIS_NOTUSED(V) ((void)V)
 ```
 
 ## 数据结构
@@ -73,18 +57,6 @@ typedef struct redisClient {
     int sentlen;  /* 因为是异步写入，所以要记录已写入长度 */
     time_t lastinteraction; /* 上次互动时间(server向这个client读写数据)，用于timeout */
 } redisClient;
-```
-
-### Redis Object
-
-类型是string/list/set
-
-```c
-typedef struct redisObject{
-    int type;    /* 对应上面的宏 */
-    void *ptr;   
-    int refcount;  /* ?? */
-} robj;
 ```
 
 ### 服务器
@@ -338,31 +310,6 @@ aeCreateFileEvent(server.el, c->fd, AE_WRITABLE,
 cfd = anetAccept
 
 createClient(cfd);
-```
-
-## Redis Object实现
-
-### 构造函数
-
-```c
-static robj *createObject(int type, void *ptr)
-```
-
-尽可能复用server.objfreelist中用过的robj，不用分配内存
-
-```c
-static robj *createListObject(void)
-
-
-//free掉robj->ptr
-static void freeStringObject(robj *o)
-
-static void freeListObject(robj *o)
-
-static void incrRefCount(robj *o)
-
-//robj->refcount--，如果robj中没有元素了就把它加到server.objfreelist中
-static void decrRefCount(void *obj)
 ```
 
 ## 数据库存储
