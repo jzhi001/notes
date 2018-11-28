@@ -1,87 +1,3 @@
-# 目录
-
-* Redis协议
-
-* Redis配置文件
-
-* Redis数据类型
-
-* Redis内部数据结构
-
-  * client
-  * server
-  * db
-
-* Redis模块
-  
-  * 事件循环
-  * sds
-  * list
-  * dict
-  * anet
-
-* Redis运行流程
-  
-  * client
-
-  * server
-
-* Redis命令及实现
-
-## 命令
-
-* quit
-
-* SET <key> <value>
-
-* GET <key>
-
-* exists
-
-# redis.conf
-
-### timeout N
-
-timeout 300
-
-在客户端闲置N秒后与它断开连接
-
-### save <seconds> <changes>
-
-save 900 1  
-save 300 10  
-save 60 10000  
-
-*seconds*秒后如果至少有*changes*个修改就将数据库保存到磁盘
-
-### dir <path>
-
-dir ./
-
-存放数据库的路径，只能是文件夹
-
-### loglevel <level>
-
-设置日志级别(verbosity)
-
-* debug：用于开发和调试
-
-* notice：生产级别
-
-* warning：只显示重要信息
-
-### logfile <file>
-
-logfile stdout
-
-日志的文件名，如果设为stdout，日志将被打印到标准输出
-
-### databases <num>
-
-databases 16
-
-数据库的数量
-
 # redis.c
 
 ## 参数
@@ -97,7 +13,6 @@ databases 16
 
 ```C
 #define REDIS_SERVERPORT 6379
-#define REDIS_MAXIDLETIME (60*5) /*对应redis.conf中的timeout*/
 #define REDIS_QUERYBUF_LEN 1024 /* 用户单行命令的最大长度 */
 #define REDIS_LOADBUF_LEN 1024 /* ?? */
 #define REDIS_MAX_ARGS          16 /* ?? */
@@ -113,8 +28,6 @@ databases 16
 ```
 
 ### 命令类型
-
-没看懂
 
 ```c
 #define REDIS_CMD_BULK          1
@@ -136,14 +49,6 @@ databases 16
 ```c
 #define REDIS_HEAD 0
 #define REDIS_TAIL 1
-```
-
-### 日志级别
-
-```c
-#define REDIS_DEBUG 0  /* 日志以 '.' 开头*/
-#define REDIS_NOTICE 1  /* 日志以 '-' 开头 */
-#define REDIS_WARNING 2  /* 日志以 '*' 开头 */
 ```
 
 ### 防止编译器的多余参数警告
@@ -182,15 +87,6 @@ typedef struct redisObject{
 } robj;
 ```
 
-### redis.conf中save实现
-
-```c
-struct saveparam{
-    time_t seconds;
-    int changes;
-};
-```
-
 ### 服务器
 
 ```c
@@ -203,10 +99,10 @@ struct redisServer {
     char neterr[ANET_ERR_LEN];  /* ?? */
     aeEventLoop *el;
     int verbosity;  /* 对应redis.conf中的loglevel */
-    int cronloops;  /* Redis事件循环次数？？ */
-    int maxidletime;  /* ?? */
+    int cronloops;  /* Redis eventLoop 循环次数 */
+    int maxidletime;  /* 最大闲置时间 */
     int dbnum;
-    list *objfreelist;          /* robj链表，里面都是用过的robj，通过复用避免内存分配 */
+    list *objfreelist;  /* robj链表，里面都是用过的robj，通过复用避免内存分配 */
     int bgsaveinprogress;  /* bgsave 进度 */
     time_t lastsave;  /* 上一次save的时间 */
     struct saveparam *saveparams;
@@ -278,31 +174,10 @@ static struct redisCommand cmdTable[] = {
 };
 ```
 
-## 日志
-
-* redis.conf
-  * logfile -> server.logfile
-  * loglevel -> 参数level
-
-```c
-void redisLog(int level, const char *fmt, ...)
-```
-
-logfile默认为stdout
-不同level以不同字符开头(见宏定义)
-
 ### 新的哈希表类型
 
 sds => Redis Object  
 用于Redis数据库
-
-## 关闭闲置客户端
-
-```c
-void closeTimedoutClients(void)
-```
-
-now - c->lastinteraction > server.maxidletime
 
 ### serverCron 时间事件处理函数(1s)
 
