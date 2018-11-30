@@ -3,7 +3,7 @@
 ## 加载配置文件
 
 ```c
-/* 实现 in redis.c */
+/* in redis.c */
 int main(int argc, char **argv);
 
 逻辑伪代码：

@@ -57,6 +57,31 @@ static struct redisServer server;
 
 * 开始事件循环
 
+```c
+//in redis.c
+int main(int argc, char **argv) {
+    initServerConfig();
+    initServer();
+    if (argc == 2) {
+        ResetServerSaveParams();
+        loadServerConfig(argv[1]);
+        redisLog(REDIS_NOTICE,"Configuration loaded");
+    } else if (argc > 2) {
+        fprintf(stderr,"Usage: ./redis-server [/path/to/redis.conf]\n");
+        exit(1);
+    }
+    redisLog(REDIS_NOTICE,"Server started");
+    if (loadDb("dump.rdb") == REDIS_OK)
+        redisLog(REDIS_NOTICE,"DB loaded from disk");
+    if (aeCreateFileEvent(server.el, server.fd, AE_READABLE,
+        acceptHandler, NULL, NULL) == AE_ERR) oom("creating file event");
+    redisLog(REDIS_NOTICE,"The server is now ready to accept connections");
+    aeMain(server.el);
+    aeDeleteEventLoop(server.el);
+    return 0;
+}
+```
+
 ## initServerConfig
 
 在[redis.conf](./redis-conf.md)中都见过了

@@ -46,17 +46,17 @@
 
 ## Redis服务器运行流程
 
-* [初始化配置相关字段](#initServerConfig)
+* [初始化配置相关字段](./server.md#initServerConfig)
 
-* 初始化其他字段
+* [初始化其他字段](./server.md#initServer)
 
-* 注册主循环事件serverCron
+* [注册主循环事件serverCron](./server.md#serverCron)
 
-* 加载配置文件
+* [加载配置文件](./redis-conf.md#加载配置文件)
 
 * 加载dump.rdb
 
-* 注册文件事件acceptHandler(接受并创建client)
+* 注册文件事件acceptHandler([创建客户端](./client.md#创建客户端))
 
   * 接受客户端连接
 

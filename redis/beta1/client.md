@@ -18,6 +18,16 @@ typedef struct redisClient {
 
 ## 创建客户端
 
+* 接受客户端连接
+
+* 创建redisClient
+
+  * 初始化变量
+
+  * 注册文件事件readQueryFromClient(从客户端读取命令并在命令完整时执行)
+
+  * 命令执行函数中注册文件事件sendReplyToClient(将结果写入客户端)
+
 ```c
 //in redis.c
 static int createClient(int fd) {
