@@ -30,6 +30,10 @@ static struct redisCommand cmdTable[] = {
 TODO
 
 ```c
+static int processCommand(redisClient *c)
+```
+
+```c
 static void addReply(redisClient *c, robj *obj);
 ```
 
