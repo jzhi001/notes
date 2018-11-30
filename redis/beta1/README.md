@@ -30,9 +30,9 @@
 
 * event loop
 
-* client
+* [client](./client.md#数据结构)
 
-* server
+* [server](./server.md#server-数据结构)
 
 * Redis Object 实现
 
@@ -42,19 +42,37 @@
 
   * [List type robj](./robj.md#List-type-robj)
 
-* Redis command
+* [Redis command](./redis-command.md)
 
-## Redis运行流程
+## Redis服务器运行流程
 
-TODO
+* [初始化配置相关字段](#initServerConfig)
 
-## save & bgsave
+* 初始化其他字段
 
-TODO
+* 注册主循环事件serverCron
 
-## dump.rdb
+* 加载配置文件
 
-TODO
+* 加载dump.rdb
+
+* 注册文件事件acceptHandler(接受并创建client)
+
+  * 接受客户端连接
+
+  * 创建redisClient
+
+    * 初始化变量
+
+    * 注册文件事件readQueryFromClient(从客户端读取命令并在命令完整时执行)
+
+    * 命令执行函数中注册文件事件sendReplyToClient(将结果写入客户端)
+
+* 开始事件循环
+
+## [dump.rdb](./rdb.md#格式)
+
+## [save](./rdb.md#save) & [bgsave](./rdb.md#bgsave)
 
 ## Redis命令及实现
 
@@ -64,7 +82,7 @@ TODO
 
 * [sds](../sds.md)
 
-* adlist
+* [adlist](../adlist.md)
 
 * dict
 
