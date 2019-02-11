@@ -8,7 +8,7 @@ long 和 long long 的区别
 
 [Swallowing the Semicolon in C macros](https://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon)
 
-[Stringizing in C marcos](https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing)
+
 
 ---
 
