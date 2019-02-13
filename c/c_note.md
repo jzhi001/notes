@@ -35,6 +35,12 @@ Example:
 
 ## Pitfall & trick
 
+### long VS long long
+
+See [Wiki](https://en.wikipedia.org/wiki/C_data_types), `long` type is at least 32 bits and `long long` is at least 64 bits.  
+
+Note: `int` is at least **16** bits which is same as `short`.
+
 ### Flexible Array Member
 
 See [this](https://en.wikipedia.org/wiki/Flexible_array_member), I've seen lots of it in Redis source code.
