@@ -7,8 +7,16 @@
 
 ## Japanese
 
+### Dictionary
+
 * [kotobank](https://kotobank.jp/)
 * [niconico](https://dic.nicovideo.jp/a/%E3%83%8B%E3%82%B3%E3%83%8B%E3%82%B3%E5%A4%A7%E7%99%BE%E7%A7%91)
+
+### Learning
+
+* [Japanese 101](https://www.japanesepod101.com/index.php)
+* [Fluent U](https://www.fluentu.com/)
+* [Others](https://www.fluentu.com/blog/japanese/learn-japanese-websites/)
 
 ## Ruby Gem
 
