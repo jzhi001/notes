@@ -1,5 +1,11 @@
 # Ruby Notes
 
+
+
+## Install Ruby
+
+[ruby-install](https://github.com/postmodern/ruby-install#readme)
+
 ## Where are gems installed?
 
 `gem environment`, check `INSTALLATION DIRECTORY` and `GEM PATHS`  

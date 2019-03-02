@@ -1,5 +1,21 @@
 # Resources
 
+## English
+
+* [Webster](https://www.merriam-webster.com/)
+* [vocabulary](https://www.vocabulary.com/)
+
+## Japanese
+
+* [kotobank](https://kotobank.jp/)
+* [niconico](https://dic.nicovideo.jp/a/%E3%83%8B%E3%82%B3%E3%83%8B%E3%82%B3%E5%A4%A7%E7%99%BE%E7%A7%91)
+
+## Ruby Gem
+
+* [offcial guide](https://guides.rubygems.org/make-your-own-gem/)
+
+
+
 ## C
 
 * [The GNU C Library](https://www.gnu.org/software/libc/manual/html_node/index.html)
