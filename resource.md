@@ -7,6 +7,12 @@
 
 ## Japanese
 
+* [hirogaru-nihongo](https://hirogaru-nihongo.jp/)
+* [tokyo-university](https://jplang.tufs.ac.jp/)
+* [anime-manga](http://www.anime-manga.jp/)
+* [news web easy](https://www3.nhk.or.jp/news/easy/)
+* [marugoto](http://words.marugotoweb.jp/top.php?l)
+
 ### Dictionary
 
 * [kotobank](https://kotobank.jp/)
